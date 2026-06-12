@@ -10,7 +10,7 @@ import java.io.IOException;
 
 public class IcebergLocalDemo {
     public static void main(String[] args) throws IOException {
-        MyCatalog myCatalog = new MyCatalog();
+        MyCatalog myCatalog = MyCatalog.myCatalog;
         Table table = myCatalog.createTableExample();
 
         // 打印快照信息
@@ -21,7 +21,7 @@ public class IcebergLocalDemo {
                 .where(Expressions.greaterThan("score", 85.0))
                 .build()) {
             for (Record rec : result) {
-                System.out.println(rec.getField("user_id") + " -> " + rec.getField("score"));
+                System.out.println(rec.getField(Const.ID_NAME) + " -> " + rec.getField("score"));
             }
         }
 

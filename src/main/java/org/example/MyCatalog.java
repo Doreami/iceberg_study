@@ -18,6 +18,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MyCatalog {
+    public static final MyCatalog myCatalog;
+
+    static {
+        myCatalog = new MyCatalog();
+    }
+
+    public static Catalog getCatalog() {
+        return myCatalog.getCatalog();
+    }
+
     private String warehousePath;
     private Catalog catalog;
 
@@ -54,7 +64,7 @@ public class MyCatalog {
 
         // 1. 新建表
         Schema schema = new Schema(
-                Types.NestedField.required(1, "user_id", Types.LongType.get()),
+                Types.NestedField.required(1, "id", Types.LongType.get()),
                 Types.NestedField.required(2, "name", Types.StringType.get()),
                 Types.NestedField.required(3, "score", Types.DoubleType.get())
         );
@@ -66,7 +76,7 @@ public class MyCatalog {
         List<Record> records = new ArrayList<>();
         for (long i = 1; i <= 100; i++) {
             GenericRecord record = GenericRecord.create(schema);
-            record.setField("user_id", i);
+            record.setField(Const.ID_NAME, i);
             record.setField("name", "user_" + i);
             record.setField("score", Math.random() * 100);
             records.add(record);

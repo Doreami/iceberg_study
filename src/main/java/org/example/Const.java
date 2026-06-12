@@ -16,4 +16,6 @@ public class Const {
             WARE_HOUSE_PATH = "/tmp/iceberg_learn";
         }
     }
+
+    public static final String ID_NAME = "id";
 }
