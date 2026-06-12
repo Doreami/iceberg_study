@@ -1,10 +1,7 @@
 package org.example;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.iceberg.FileFormat;
-import org.apache.iceberg.PartitionSpec;
-import org.apache.iceberg.Schema;
-import org.apache.iceberg.Table;
+import org.apache.iceberg.*;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.data.GenericRecord;
@@ -21,16 +18,28 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MyCatalog {
+    private String warehousePath;
     private Catalog catalog;
 
     public MyCatalog() {
+        this.warehousePath = Const.WARE_HOUSE_PATH;
         Configuration hadoopConf = new Configuration();
-        catalog = new HadoopCatalog(hadoopConf, Const.WARE_HOUSE_PATH);
+        this.catalog = new HadoopCatalog(hadoopConf, warehousePath);
+        System.out.println("Catalog 初始化成功，仓库路径：" + warehousePath);
+    }
+
+    public void printTableSnapshotInfo(Table table) {
+        System.out.println("=========== 快照信息 ===========");
+        Snapshot snapshot = table.currentSnapshot();
+        System.out.println("\n当前快照 ID: " + snapshot.snapshotId());
+        System.out.println("快照时间: " + snapshot.timestampMillis());
+        System.out.println("快照操作: " + snapshot.operation());
     }
 
     public Table createTable(TableIdentifier tableId,
                              Schema schema, PartitionSpec partitionSpec) {
         Table table = catalog.createTable(tableId, schema, partitionSpec);
+        System.out.println("=========== 表信息 ===========");
         System.out.println("新建表:");
         System.out.println("表名称：" + table.name());
         System.out.println("表位置：" + table.location());
@@ -38,6 +47,11 @@ public class MyCatalog {
     }
 
     public Table createTableExample() throws IOException {
+        TableIdentifier tableId = TableIdentifier.of("mydb", "user_table");
+        if (catalog.tableExists(tableId)) {
+            catalog.dropTable(tableId);
+        }
+
         // 1. 新建表
         Schema schema = new Schema(
                 Types.NestedField.required(1, "user_id", Types.LongType.get()),
@@ -45,14 +59,10 @@ public class MyCatalog {
                 Types.NestedField.required(3, "score", Types.DoubleType.get())
         );
 
-        PartitionSpec spec = PartitionSpec.builderFor(schema)
-                .identity("user_id")
-                .build();
-
-        TableIdentifier tableId = TableIdentifier.of("mydb", "user_table");
+        PartitionSpec spec = PartitionSpec.unpartitioned();
         Table table = createTable(tableId, schema, spec);
 
-        // 2. 主播数据
+        // 2. 准备 100 条测试数据
         List<Record> records = new ArrayList<>();
         for (long i = 1; i <= 100; i++) {
             GenericRecord record = GenericRecord.create(schema);
@@ -66,21 +76,27 @@ public class MyCatalog {
         OutputFileFactory fileFactory = OutputFileFactory.builderFor(table, 1, 1)
                 .format(FileFormat.PARQUET)
                 .build();
+
         DataWriter<Record> writer = Parquet.writeData(fileFactory.newOutputFile())
                 .schema(schema)
                 .createWriterFunc(GenericParquetWriter::buildWriter)
+                .withSpec(spec)
                 .overwrite()
                 .build();
+
         for (Record record : records) {
             writer.write(record);
         }
         writer.close();
-        table.newAppend().appendFile(writer.toDataFile()).commit();
 
+        // 4. 提交数据文件到表（生成快照）
+        table.newAppend().appendFile(writer.toDataFile()).commit();
+        System.out.println("✅ 成功写入 " + records.size() + " 条记录到 Parquet 文件");
         return table;
     }
 
     public void close() throws IOException {
-        ((HadoopCatalog)this.catalog).close();
+        ((HadoopCatalog) this.catalog).close();
+        System.out.println("\n✅ 演示完成，可以在 " + warehousePath + " 目录下查看 Iceberg 文件结构");
     }
 }

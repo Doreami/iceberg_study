@@ -10,8 +10,9 @@ public class Const {
     static {
         if (isWindows()) {
             // Windows 下请改为 "file:///D:/iceberg_learn" 等带盘符的路径
-            WARE_HOUSE_PATH = "D:/iceberg_learn";
+            WARE_HOUSE_PATH = "file:///D:/iceberg_learn";
         } else {
+//            等价于 file:///tmp/iceberg_learn
             WARE_HOUSE_PATH = "/tmp/iceberg_learn";
         }
     }

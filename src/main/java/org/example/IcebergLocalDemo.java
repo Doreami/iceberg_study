@@ -13,6 +13,9 @@ public class IcebergLocalDemo {
         MyCatalog myCatalog = new MyCatalog();
         Table table = myCatalog.createTableExample();
 
+        // 打印快照信息
+        myCatalog.printTableSnapshotInfo(table);
+
         // 读取过滤
         try (CloseableIterable<Record> result = IcebergGenerics.read(table)
                 .where(Expressions.greaterThan("score", 85.0))
