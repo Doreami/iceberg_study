@@ -108,8 +108,7 @@ public class IndexCommander {
         );
 
         // 写puffin文件
-        String puffinFilePath = String.format("%s/%s/%s/btree-index-id-%s.puffin",
-                Const.WARE_HOUSE_PATH.replace("file:/", ""),
+        String puffinFilePath = String.format("%s/%s/btree-index-id-%s.puffin",
                 table.location(),
                 "indices",
                 snapshot.snapshotId());
@@ -145,6 +144,6 @@ public class IndexCommander {
         );
         table.updateStatistics().setStatistics(snapshot.snapshotId(), statsFile).commit();
 
-        System.out.println("创建索引成功");
+        System.out.println("创建索引成功, 写入路径: " + puffinFilePath);
     }
 }
