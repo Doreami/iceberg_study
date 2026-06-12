@@ -1,29 +1,24 @@
 package org.example;
 
 import org.apache.iceberg.*;
-import org.apache.iceberg.data.IcebergGenerics;
-import org.apache.iceberg.data.Record;
-import org.apache.iceberg.expressions.Expressions;
-import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.catalog.TableIdentifier;
 
 import java.io.IOException;
 
 public class IcebergLocalDemo {
     public static void main(String[] args) throws IOException {
-        MyCatalog myCatalog = MyCatalog.myCatalog;
-        Table table = myCatalog.createTableExample();
+        MyCatalog myCatalog = MyCatalog.INSTANCE;
+        TableIdentifier tableId = TableIdentifier.of("mydb", "user_table");
+        Table table = myCatalog.createTableExample(tableId);
 
         // 打印快照信息
         myCatalog.printTableSnapshotInfo(table);
 
-        // 读取过滤
-        try (CloseableIterable<Record> result = IcebergGenerics.read(table)
-                .where(Expressions.greaterThan("score", 85.0))
-                .build()) {
-            for (Record rec : result) {
-                System.out.println(rec.getField(Const.ID_NAME) + " -> " + rec.getField("score"));
-            }
-        }
+        // 读取所有数据
+        Executor.search(tableId);
+
+        // 创建索引
+        IndexCommander.createIndex(tableId);
 
         myCatalog.close();
     }

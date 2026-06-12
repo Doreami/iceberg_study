@@ -26,7 +26,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 public class IndexCommander {
-    private static final Catalog catalog = MyCatalog.getCatalog();
+    private static final Catalog catalog = MyCatalog.INSTANCE.getCatalog();
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     /**

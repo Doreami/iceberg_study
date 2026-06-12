@@ -11,7 +11,7 @@ import org.apache.iceberg.puffin.PuffinCompressionCodec;
 import org.apache.iceberg.puffin.PuffinWriter;
 
 public class PuffinManager {
-    private final static Catalog catalog = MyCatalog.getCatalog();
+    private final static Catalog catalog = MyCatalog.INSTANCE.getCatalog();
 
     // puffin
 //    private void writePuffin(TableIdentifier tableId) {

@@ -18,15 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MyCatalog {
-    public static final MyCatalog myCatalog;
-
-    static {
-        myCatalog = new MyCatalog();
-    }
-
-    public static Catalog getCatalog() {
-        return myCatalog.getCatalog();
-    }
+    public static final MyCatalog INSTANCE = new MyCatalog();
 
     private String warehousePath;
     private Catalog catalog;
@@ -56,8 +48,7 @@ public class MyCatalog {
         return table;
     }
 
-    public Table createTableExample() throws IOException {
-        TableIdentifier tableId = TableIdentifier.of("mydb", "user_table");
+    public Table createTableExample(TableIdentifier tableId) throws IOException {
         if (catalog.tableExists(tableId)) {
             catalog.dropTable(tableId);
         }
@@ -108,5 +99,9 @@ public class MyCatalog {
     public void close() throws IOException {
         ((HadoopCatalog) this.catalog).close();
         System.out.println("\n✅ 演示完成，可以在 " + warehousePath + " 目录下查看 Iceberg 文件结构");
+    }
+
+    public Catalog getCatalog() {
+        return catalog;
     }
 }
