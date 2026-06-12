@@ -108,9 +108,10 @@ public class IndexCommander {
         );
 
         // 写puffin文件
-        String puffinFilePath = String.format("%s/%s/btree-index-id-%s.puffin",
+        String puffinFilePath = String.format("%s/%s/%s/btree-index-id-%s.puffin",
                 Const.WARE_HOUSE_PATH.replace("file:/", ""),
-                table.name(),
+                table.location(),
+                "indices",
                 snapshot.snapshotId());
         FileIO fileIO = table.io();
         OutputFile outputFile = fileIO.newOutputFile(puffinFilePath);
