@@ -14,11 +14,11 @@
         <maven.compiler.target>21</maven.compiler.target>
         <iceberg.version>1.11.0</iceberg.version>
         <hadoop.version>3.3.4</hadoop.version>
-        <parquet.version>1.12.3</parquet.version>
+        <parquet.version>1.17.1</parquet.version>
     </properties>
 
     <dependencies>
-        <!-- Iceberg 核心模块 -->
+        <!-- Iceberg -->
         <dependency>
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-core</artifactId>
@@ -29,8 +29,19 @@
             <artifactId>iceberg-data</artifactId>
             <version>${iceberg.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-parquet</artifactId>
+            <version>${iceberg.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-orc</artifactId>
+            <version>${iceberg.version}</version>
+            <scope>runtime</scope>
+        </dependency>
 
-        <!-- Hadoop Client，排除所有 parquet -->
+        <!-- Hadoop (本地文件系统, 不含 Parquet 传递依赖) -->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
@@ -43,28 +54,10 @@
             </exclusions>
         </dependency>
 
-        <!-- Iceberg Parquet 支持，排除其传递的 parquet -->
-        <dependency>
-            <groupId>org.apache.iceberg</groupId>
-            <artifactId>iceberg-parquet</artifactId>
-            <version>${iceberg.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.apache.parquet</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- 显式声明新版本 Parquet 依赖 -->
+        <!-- Parquet (统一版本) -->
         <dependency>
             <groupId>org.apache.parquet</groupId>
             <artifactId>parquet-hadoop</artifactId>
-            <version>${parquet.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.parquet</groupId>
-            <artifactId>parquet-common</artifactId>
             <version>${parquet.version}</version>
         </dependency>
         <dependency>
@@ -78,22 +71,24 @@
             <version>${parquet.version}</version>
         </dependency>
 
-        <!-- SLF4J 简单日志实现 -->
+        <!-- 日志 -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
             <version>2.0.9</version>
         </dependency>
-
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <version>2.15.2</version>
-        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.6.3</version>
+                <configuration>
+                    <cleanupDaemonThreads>false</cleanupDaemonThreads>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
