@@ -38,8 +38,16 @@ public class MyCatalog {
         System.out.println("快照操作: " + snapshot.operation());
     }
 
+    private void dropTableIfExists(TableIdentifier tableId) {
+        if (catalog.tableExists(tableId)) {
+            System.out.println("有同名表, 将旧表删除");
+            catalog.dropTable(tableId);
+        }
+    }
+
     public Table createTable(TableIdentifier tableId,
                              Schema schema, PartitionSpec partitionSpec) {
+        this.dropTableIfExists(tableId);
         Table table = catalog.createTable(tableId, schema, partitionSpec);
         System.out.println("=========== 表信息 ===========");
         System.out.println("新建表:");
@@ -49,9 +57,7 @@ public class MyCatalog {
     }
 
     public Table createTableExample(TableIdentifier tableId) throws IOException {
-        if (catalog.tableExists(tableId)) {
-            catalog.dropTable(tableId);
-        }
+        this.dropTableIfExists(tableId);
 
         // 1. 新建表
         Schema schema = new Schema(
@@ -61,7 +67,7 @@ public class MyCatalog {
         );
 
         PartitionSpec spec = PartitionSpec.unpartitioned();
-        Table table = createTable(tableId, schema, spec);
+        Table table = this.createTable(tableId, schema, spec);
 
         // 2. 准备 100 条测试数据
         List<Record> records = new ArrayList<>();
