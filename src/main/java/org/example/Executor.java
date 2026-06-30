@@ -90,4 +90,27 @@ public class Executor {
             }
         }
     }
+
+    /**
+     * 直接用 _row_id 值查找数据（仅 V3 表支持，Parquet 中需有该列）。
+     * 注意: _row_id 是元数据列，不在 table schema 中，Expressions 无法直接过滤元数据列。
+     * 因此先投影全量数据，再应用层过滤 _row_id。
+     */
+    public static void searchByRowId(TableIdentifier tableId, java.util.Set<Long> rowIdSet) throws IOException {
+        Table table = catalog.loadTable(tableId);
+        Schema schemaWithLineage = MetadataColumns.schemaWithRowLineage(table.schema());
+
+        try (CloseableIterable<Record> result = IcebergGenerics.read(table)
+                .project(schemaWithLineage)
+                .build()) {
+            for (Record rec : result) {
+                Long rowId = (Long) rec.getField(MetadataColumns.ROW_ID.name());
+                if (rowId != null && rowIdSet.contains(rowId)) {
+                    System.out.printf("id=%s, name=%s, score=%.2f, %s=%s%n",
+                            rec.getField("id"), rec.getField("name"), rec.getField("score"),
+                            MetadataColumns.ROW_ID.name(), rowId);
+                }
+            }
+        }
+    }
 }

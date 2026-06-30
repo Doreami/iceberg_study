@@ -79,6 +79,13 @@ public class Example {
         System.out.println("\n══════ 示例6: 精确查找 + _row_id ══════");
         Executor.searchByIdWithRowLineage(tableId, List.of(1L, 50L, 100L));
 
+        // ══════════ 示例6+: 直接用 _row_id 值查数据 ══════════
+        System.out.println("\n══════ 示例6+: 直接用 _row_id 查数据 ══════");
+        System.out.println("关键 API: 扫描全量 → 应用层按 _row_id 过滤");
+        System.out.println("(_row_id 是元数据列, Expressions 无法直接过滤, 需应用层过滤)");
+        System.out.println("查找 _row_id in [0, 49, 99]:");
+        Executor.searchByRowId(tableId, java.util.Set.of(0L, 49L, 99L));
+
         // ══════════ 示例7: 增量扫描 (两个快照之间) ══════════
         System.out.println("\n══════ 示例7: 增量扫描 (IncrementalAppendScan) ══════");
         long snap1Id = table.currentSnapshot().snapshotId();
