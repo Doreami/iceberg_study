@@ -11,15 +11,15 @@ import java.util.List;
 
 /**
  * Row Lineage (RowID) API 体验示例。
- *
+ * <p>
  * Iceberg V3 (format-version=3) 表自动启用 Row Lineage：
- *   - 每行数据有全局唯一的 _row_id (Long 类型)
- *   - Snapshot.firstRowId() — 快照中第一个新分配 row-id
- *   - Snapshot.addedRows()  — 快照分配 row-id 的行数上界
- *   - DataFile.firstRowId() — 文件中第一行的 row-id
- *   - 查询时通过 MetadataColumns.schemaWithRowLineage() 读取 _row_id 列
- *   - 增量扫描通过 IncrementalAppendScan 实现 CDC 场景
- *
+ * - 每行数据有全局唯一的 _row_id (Long 类型)
+ * - Snapshot.firstRowId() — 快照中第一个新分配 row-id
+ * - Snapshot.addedRows()  — 快照分配 row-id 的行数上界
+ * - DataFile.firstRowId() — 文件中第一行的 row-id
+ * - 查询时通过 MetadataColumns.schemaWithRowLineage() 读取 _row_id 列
+ * - 增量扫描通过 IncrementalAppendScan 实现 CDC 场景
+ * <p>
  * 参考: docs/rowid/Java Vs Rust-Rowid.md
  */
 public class Example {
