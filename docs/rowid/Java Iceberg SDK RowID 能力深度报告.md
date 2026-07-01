@@ -50,13 +50,22 @@ Java SDK 在写入数据时**自动**完成以下操作：
 
 ### 3.3 读取机制：动态计算与物理列自动切换
 
-`_row_id` 的读取由 SDK 根据条件自动选择路径：
-
-**默认 — 动态计算**：首次 INSERT 后 Parquet 无物理列，SDK 通过公式计算：
+`_row_id` 的读取由 SDK 内部通过 `RowIdReader` 实现：
 
 ```
-_row_id = DataFile.firstRowId() + row_position_in_file
-_last_updated_sequence_number = 当前快照的 sequenceNumber
+read():
+  value = idReader.read()        // 尝试读物理列
+  if value != null → return value // 有物理列 → 直接返回
+  return firstRowId + position    // 无物理列 → 动态计算 fallback
+```
+
+`_last_updated_sequence_number` 同理（`LastUpdatedSeqReader`），物理列优先，fallback 为文件所属快照的 `sequenceNumber`。
+
+**动态计算公式**：
+
+```
+_row_id = firstRowId + position  (position = rowGroupStart + rowOffset)
+_last_updated_sequence_number = 文件所属快照的 sequenceNumber
 ```
 
 实测 (V1/V2): ParquetFileReader 检查确认仅含 id/name/score 三列，读取时 `_row_id` 正常返回 0,1,...,99。
@@ -72,7 +81,7 @@ _last_updated_sequence_number = 当前快照的 sequenceNumber
 
 两个路径对调用者透明：统一用 `schemaWithRowLineage()` 投影 + `rec.getField("_row_id")` 取值。
 
-COALESCE(_row_id, ICEBERG_FIRSTROWID + FILE_POSITION) 是 Impala/Hive 等引擎层的 SQL 表达式，非 SDK 级别的代码逻辑。SDK 内部通过 scan 框架在读取时注入 `_row_id` 值。
+引擎层（Impala/Hive）用 SQL `COALESCE(_row_id, ICEBERG_FIRSTROWID + FILE_POSITION)` 表达此逻辑。SDK 层的实现是 `RowIdReader` 中的简单分支：先读物理列 → 返回 null 时 fallback 到 `firstRowId + position`。
 
 ### 3.4 元数据列（Metadata Columns）
 
@@ -81,7 +90,7 @@ Java SDK 通过以下 MetadataColumns 常量来定义 RowID 相关的列：
 | 常量                                             | 列名                              | 字段 ID      | 说明                                   |
 | ---------------------------------------------- | ------------------------------- | ---------- | ------------------------------------ |
 | `MetadataColumns.ROW_ID`                       | `_row_id`                       | 2147483540 | 默认 firstRowId + position 动态计算；物理列存在时直接读取 |
-| `MetadataColumns.LAST_UPDATED_SEQUENCE_NUMBER` | `_last_updated_sequence_number` | 2147483539 | 默认赋值为当前快照 sequenceNumber；物理列存在时直接读取    |
+| `MetadataColumns.LAST_UPDATED_SEQUENCE_NUMBER` | `_last_updated_sequence_number` | 2147483539 | 默认赋值为文件所属快照 sequenceNumber；物理列存在时直接读取    |
 | `MetadataColumns.ROW_POSITION`                 | `_pos`                          | 2147483645 | 行在文件中的位置偏移                           |
 
 实测 (V3):
@@ -95,9 +104,9 @@ Java SDK 通过以下 MetadataColumns 常量来定义 RowID 相关的列：
 
 `_row_id` 在 Parquet 中的物理位置（通常在最后一列，因为 `TypeUtil.join()` 将 MetadataColumns 追加在用户 schema 之后）**不影响 SDK 识别它**。SDK 通过 **field ID** 来区分系统列和用户列：
 
-- Iceberg 将 field ID 范围 `Integer.MAX_VALUE - 100` ~ `Integer.MAX_VALUE - 200` 预留为元数据列
-- `_row_id` 的 field ID = `2147483540`（`Integer.MAX_VALUE - 107`），落在此预留范围内
-- Reader 看到这个 field ID 即判定为系统列，**无论列在 Parquet 中处于什么位置**
+- Row Lineage 相关元数据列使用 `MAX_VALUE - 101` ~ `MAX_VALUE - 108`（8 个 ID），其他元数据列使用 `MAX_VALUE - 1` ~ `MAX_VALUE - 7`
+- `_row_id` 的 field ID = `2147483540`（`MAX_VALUE - 107`）
+- Reader 看到此 field ID 即判定为系统列，**无论列在 Parquet 中处于什么位置**（`TypeUtil.join()` 追加在用户 schema 末尾）
 
 这一设计保证了：元数据列和用户列的命名不会冲突；物理存储位置不影响识别；Schema 演化（增加/删除用户列）不会误伤元数据列。
 
@@ -263,7 +272,7 @@ Java SDK 本身**不提供** `row_lineage` 系统表或类似的直接查询接�
 | **`_row_id` 分配**                    | 基于 `next-row-id` 自动分配        | ✅ 完整支持  |
 | **`_row_id` 写入**                    | next-row-id 分配 + manifest 记录 first_row_id；默认不写物理列 | ✅ 完整支持  |
 | **`_row_id` 读取**                    | 默认动态计算；物理列存在时直接读取（自动切换） | ✅ 完整支持  |
-| **`_last_updated_sequence_number`** | 默认动态计算；物理列存在时直接读取（自动切换）   | ✅ 完整支持  |
+| **`_last_updated_sequence_number`** | 默认取文件所属快照 sequenceNumber；物理列存在时直接读取   | ✅ 完整支持  |
 | **INSERT RowID**                    | 分配全新唯一 ID                    | ✅ 完整支持  |
 | **DELETE RowID**                    | 保持不变，行标记删除                   | ✅ 完整支持  |
 | **UPDATE RowID**                    | 引擎层继承旧行；SDK 层 Overwrite 新 ID | ✅ 完整支持  |
@@ -284,7 +293,7 @@ Java SDK 本身**不提供** `row_lineage` 系统表或类似的直接查询接�
 | **`_row_id` 物理列写入**                 | ❌ 默认不写入（动态计算）                                                  | ❌ 无公开 PR            | 两者均不在首次 INSERT 时嵌入物理列，Compaction 时可显式写入          |
 | **`_row_id` 列读取**                   | ✅ 动态计算 / 物理列读取 自动切换                                     | ❌ 无公开 PR            | Java 默认动态计算；Compaction 后有物理列时读物理列                |
 | **`_pos` 列读取**                      | ✅ 完整支持                                                         | 🔄 进行中（#2746 Draft） | Rust 正在实现 `_pos` 列读取                             |
-| **`_last_updated_sequence_number`** | ✅ 动态计算 / 物理列读取 自动切换                                      | ❌ 无公开 PR            | Java 默认动态计算；Compaction 后有物理列时读物理列                |
+| **`_last_updated_sequence_number`** | ✅ 文件所属快照 seqNum / 物理列读取 自动切换                              | ❌ 无公开 PR            | Java 默认取文件快照 sequenceNumber；Compaction 后读物理列         |
 | **UPDATE RowID 继承**                 | ✅ 引擎层支持 (SDK 层 Overwrite 不继承)                                  | ❌ 无公开 PR            | Java 引擎层 UPDATE 继承；SDK Overwrite 是 DELETE+INSERT |
 | **Compaction 保留 RowID**             | ✅ 完整支持 (需显式投影 _row_id + _last_updated_sequence_number)               | ❌ 无公开 PR            | Java 需用 schemaWithRowLineage 同时投影两列；Rust 暂无此能力    |
 | **增量扫描 API**                        | ✅ 完整支持                                                         | ✅ 已支持（#2153 Merged） | Rust 已实现 `appends_after()`                       |
