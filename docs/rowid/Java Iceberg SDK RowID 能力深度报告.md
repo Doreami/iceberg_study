@@ -80,6 +80,26 @@ Java SDK 通过以下 MetadataColumns 常量来定义 RowID 相关的列：
 - `_last_updated_sequence_number` 列名正确（非 `_file_last_updated_sequence_number`）
 - 所有元数据列都是**动态计算**的，不作为物理列存储在 Parquet 中
 
+### 3.5 SDK 如何区分系统列与用户列
+
+`_row_id` 在 Parquet 中的物理位置（通常在最后一列，因为 `TypeUtil.join()` 将 MetadataColumns 追加在用户 schema 之后）**不影响 SDK 识别它**。SDK 通过 **field ID** 来区分系统列和用户列：
+
+- Iceberg 将 field ID 范围 `Integer.MAX_VALUE - 100` ~ `Integer.MAX_VALUE - 200` 预留为元数据列
+- `_row_id` 的 field ID = `2147483540`（`Integer.MAX_VALUE - 107`），落在此预留范围内
+- Reader 看到这个 field ID 即判定为系统列，**无论列在 Parquet 中处于什么位置**
+
+这一设计保证了：元数据列和用户列的命名不会冲突；物理存储位置不影响识别；Schema 演化（增加/删除用户列）不会误伤元数据列。
+
+### 3.6 物理列与动态计算的统一访问
+
+对上层调用者而言，**读 `_row_id` 时无需关心它是物理列还是动态计算**：
+
+1. 使用 `MetadataColumns.schemaWithRowLineage()` 投影后，`rec.getField("_row_id")` 即可取值
+2. 若 Compaction 时显式写入了 `_row_id` 物理列（见 §6.1），SDK 自动使用物理列值
+3. 若 Parquet 中无物理列，SDK 自动通过 `firstRowId + row_position` 动态计算
+
+两个路径对调用者透明，统一由 SDK 内部处理。
+
 ## 四、RowID 的写入与读取
 
 ### 4.1 写入 RowID
