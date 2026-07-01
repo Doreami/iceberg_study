@@ -60,7 +60,7 @@ _last_updated_sequence_number = 当前快照的 sequenceNumber
 **验证确认** (V1/V2): Parquet 数据文件经 ParquetFileReader 检查，仅含 id/name/score 三列，不含 `_row_id` 物理列。
 读取时 _row_id 始终通过动态计算获得。
 
-报告原描述的 COALESCE(_file_row_id, ICEBERG_FIRSTROWID + FILE_POSITION) 是
+报告原描述的 COALESCE(_row_id, ICEBERG_FIRSTROWID + FILE_POSITION) 是
 **Impala/Hive 等引擎层的 SQL 表达式**，不是 Java SDK 级别的代码逻辑。
 SDK 层通过 scan 框架在读取时动态注入 _row_id 值。
 
@@ -75,7 +75,7 @@ Java SDK 通过以下 MetadataColumns 常量来定义 RowID 相关的列：
 | `MetadataColumns.ROW_POSITION` | `_pos` | 2147483645 | 行在文件中的位置偏移 |
 
 **验证确认** (V3):
-- SDK 中列名是 `_row_id`，**不是 `_file_row_id`**
+- SDK 中列名是 `_row_id`
 - SDK 中**没有 `ICEBERG_FIRSTROWID`** 这个常量 —— 这是 Impala 引擎层的虚拟列命名
 - `_last_updated_sequence_number` 列名正确（非 `_file_last_updated_sequence_number`）
 - 所有元数据列都是**动态计算**的，不作为物理列存储在 Parquet 中
@@ -285,7 +285,7 @@ Java SDK 本身**不提供** `row_lineage` 系统表或类似的直接查询接�
 
 ```textile
 row-id = DataFile.firstRowId() + FILE_POSITION  (SDK 默认)
-row-id = COALESCE(_file_row_id, ICEBERG_FIRSTROWID + FILE_POSITION)  (引擎层 SQL)
+row-id = COALESCE(_row_id, ICEBERG_FIRSTROWID + FILE_POSITION)  (引擎层 SQL 表达式)
 ```
 
 - **SDK 默认**：动态计算 `firstRowId + position`
@@ -346,7 +346,7 @@ Java Iceberg SDK 的 RowID 实现是一个**从元数据管理、数据读写、
 | --- | --- | --- | --- |
 | V1 | 3.2/4.1: _row_id 作为物理列写入 Parquet | FAIL | Parquet 文件中只有用户 schema 列，不含 _row_id |
 | V2 | 3.3: COALESCE 双重保障机制 | PASS | _row_id 通过 firstRowId + position 动态计算，非 COALESCE |
-| V3 | 3.4: 隐藏列命名 _file_row_id | PASS | SDK 中名为 _row_id（非 _file_row_id），无 ICEBERG_FIRSTROWID 常量 |
+| V3 | 3.4: 隐藏列命名 _row_id | PASS | SDK 中名为 _row_id，无 ICEBERG_FIRSTROWID 常量 |
 | V4 | 5.1: INSERT 分配全局唯一 _row_id | PASS | 起始值 0，全局递增，nextRowId 正确 |
 | V5 | 5.3: UPDATE 继承 _row_id | PASS | SDK 层 overwriteByRowFilter 不继承(新 ID)，继承是引擎层行为 |
 | V6 | 5.2: DELETE _row_id 保留 | PASS | 旧快照中 _row_id 历史保留，新快照获得新 ID |
