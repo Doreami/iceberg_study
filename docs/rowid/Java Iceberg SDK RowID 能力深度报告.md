@@ -68,7 +68,7 @@ _last_updated_sequence_number = 当前快照的 sequenceNumber
 | Parquet 无 `_row_id` 列（首次 INSERT） | 动态计算：`firstRowId + row_position` | V1/V2 |
 | Parquet 有 `_row_id` 列（Compaction 后） | 直接读物理列值 | V7 |
 
-> **V7 实证**：Rewrite 后新 Parquet 有物理 `_row_id` 列（值 0,1,...,99）。若仍动态计算，结果会是 `new_firstRowId + new_position` ≠ 原始值。实际验证 100 行全部保持原值——证明 SDK 走了物理列路径。
+> **V7 实证（已排除巧合）**：Rewrite 后新文件的 manifest `firstRowId=100`（原表已有 100 行，`nextRowId=100`）。若 SDK 仍动态计算：`_row_id = 100 + position = [100, 199]`。但实测结果为 `[0, 99]`——差值 100，只有物理列读取能解释。
 
 两个路径对调用者透明：统一用 `schemaWithRowLineage()` 投影 + `rec.getField("_row_id")` 取值。
 
