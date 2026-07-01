@@ -198,7 +198,32 @@ Compaction 读取旧文件中的**存活数据**（未被删除的行），并�
 
 - 行级血缘查询将无法提供完整历史
 
-**Dremio 明确指出**：“`OPTIMIZE TABLE` 在重写数据文件时会保留这两个值。如果没有这个保证，维护任务可能会悄无声息地覆盖血缘元数据，使其在审计目的下变得不可靠。”
+**Dremio 明确指出**：”`OPTIMIZE TABLE` 在重写数据文件时会保留这两个值。如果没有这个保证，维护任务可能会悄无声息地覆盖血缘元数据，使其在审计目的下变得不可靠。”
+
+### 6.4 不显式保留的后果
+
+以上原则不仅适用于 Compaction，同样适用于 UPDATE 和 MERGE。如果引擎在执行这些操作时不显式写入 Row Lineage 字段：
+
+| 操作 | 不写入 `_row_id` 的后果 | 不写入 `_last_updated_sequence_number` 的后果 |
+|------|----------------------|------------------------------------------|
+| **UPDATE** | SDK 从 `next-row-id` 分配新值 → 旧 `_row_id` 丢失 → 血缘链断裂，无法追溯行的历史版本 | 被赋值为 UPDATE 快照的 sequence number — 这是正确的（行确实被修改了），但需要**显式写入**而非依赖动态计算 |
+| **MERGE** | 匹配行同上（丢失）；新插入行不受影响 | 同上 |
+| **Compaction** | 最严重：多文件合并后行顺序完全改变，动态计算 `new_firstRowId + new_position` 与原始值**完全不同** → 所有基于 `_row_id` 的索引和血缘全部失效 | 被赋值为 Compaction 快照的 sequence number → **所有行的”最后修改时间”被伪造为 Compaction 时间**，历史变更信息永久丢失 |
+
+**动态计算为何在 Compaction 后失效**：假设两次 INSERT 分别产生 _row_id [0,99] 和 [100,149]。Compaction 将两个文件合并为一个新文件，新文件 firstRowId=200，行重新排列。这时：
+- 原始第一行：`_row_id=0` → Compaction 后：`200+0=200` ❌
+- 原始第 50 行：`_row_id=50` → Compaction 后：`200+50=250` ❌
+
+### 6.5 Spec 要求 vs SDK 自动执行
+
+**Iceberg V3 Spec 明确规定** Compaction 必须保留 Row Lineage 元数据。这是合规要求，不是可选的优化。
+
+但需要区分：**Spec 要求什么 ≠ SDK 自动执行什么**。
+
+- `Parquet.writeData(table.schema())` — 仅写用户 schema，**不自动注入** `_row_id` 或 `_last_updated_sequence_number`
+- SDK 提供的是**工具**而非**约束**：`schemaWithRowLineage()`、`newRewrite()` 等 API 让调用方能正确实现保留逻辑，但不会在 commit 时强制校验
+- 引擎层（Spark/Flink/Impala）在实现 UPDATE/MERGE/Compaction 时必须遵守此规范，否则产生合规风险
+- **调用方的责任**：使用 `schemaWithRowLineage()` 读写，确保 Row Lineage 字段不丢失
 
 ## 七、行级血缘追踪
 
