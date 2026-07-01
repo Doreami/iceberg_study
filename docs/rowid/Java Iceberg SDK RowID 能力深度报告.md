@@ -79,7 +79,7 @@ Java SDK 通过以下 MetadataColumns 常量来定义 RowID 相关的列：
 - SDK 中列名是 `_row_id`
 - SDK 中**没有 `ICEBERG_FIRSTROWID`** 这个常量 —— 这是 Impala 引擎层的虚拟列命名
 - `_last_updated_sequence_number` 列名正确（非 `_file_last_updated_sequence_number`）
-- 所有元数据列都是**动态计算**的，不作为物理列存储在 Parquet 中
+- 所有元数据列**默认通过动态计算获取**，首次 INSERT 时不作为物理列存储。Compaction 时若用 `schemaWithRowLineage()` 写入，则成为物理列
 
 ### 3.5 SDK 如何区分系统列与用户列
 
@@ -142,7 +142,7 @@ Java SDK 通过以下 MetadataColumns 常量来定义 RowID 相关的列：
 
 Iceberg 中的 `UPDATE` 在底层是 **`DELETE` + `INSERT`** 的组合操作。
 
-> **[实测纠正]** (验证 V5): SDK 层的 `overwriteByRowFilter()` 是 DELETE + INSERT，**会给被覆盖行分配新的 `_row_id`**（验证确认：id=1 的 `_row_id` 从 0 变为 13）。
+> **验证确认** (V5): SDK 层的 `overwriteByRowFilter()` 是 DELETE + INSERT，**会给被覆盖行分配新的 `_row_id`**（验证确认：id=1 的 `_row_id` 从 0 变为 13）。
 > `_row_id` 继承（新行保留旧行的 `_row_id`）是**引擎层** (Spark/Flink/Impala) 执行 UPDATE 语句时的行为，引擎会显式读取旧的 `_row_id` 并写入新文件。
 > 纯 Java SDK 的 `OverwriteFiles` API 不提供 `_row_id` 继承功能。
 
@@ -160,9 +160,8 @@ Iceberg 中的 `UPDATE` 在底层是 **`DELETE` + `INSERT`** 的组合操作。
 | 行为        | 说明                    |
 | --------- | --------------------- |
 | **匹配到的行** | 被标记为删除，`_row_id` 保持不变 |
-
 | **插入的新行** | 获得全新的 `_row_id`       |
-| **更新后的行** | 继承旧行的 `_row_id`       |
+| **更新后的行** | 继承旧行的 `_row_id`（引擎层） |
 
 > **注意**：使用等值删除（Equality Deletes）的引擎在写入更改之前会避免读取现有数据，因此**无法为新行提供原始行 ID**，这会导致行级血缘追踪失效。Iceberg 社区推荐使用**位置删除（Position Deletes）** 来保证血缘的完整性。
 
@@ -281,7 +280,7 @@ Java SDK 本身**不提供** `row_lineage` 系统表或类似的直接查询接�
 | 能力维度                                | Java SDK 实现方式                | 支持状态    |
 | ----------------------------------- | ---------------------------- | ------- |
 | **`_row_id` 分配**                    | 基于 `next-row-id` 自动分配        | ✅ 完整支持  |
-| **`_row_id` 写入**                    | 元数据层分配 (next-row-id)，读取时动态计算 | ✅ 完整支持  |
+| **`_row_id` 写入**                    | 元数据层分配 (next-row-id)；默认不写物理列，Compaction 可显式嵌入 | ✅ 完整支持  |
 | **`_row_id` 读取**                    | 动态计算 (firstRowId + position) | ✅ 完整支持  |
 | **`_last_updated_sequence_number`** | 动态计算 (当前快照 sequenceNumber)   | ✅ 完整支持  |
 | **INSERT RowID**                    | 分配全新唯一 ID                    | ✅ 完整支持  |
@@ -325,9 +324,11 @@ row-id = COALESCE(_row_id, ICEBERG_FIRSTROWID + FILE_POSITION)  (引擎层 SQL �
 
 ### 10.2 UPDATE 时继承 RowID
 
-- `UPDATE` 产生的新行**必须继承旧行的 `_row_id`**，而非分配新 ID
+- 引擎层 `UPDATE` 产生的新行**必须继承旧行的 `_row_id`**，而非分配新 ID
 
-- 这是实现行级血缘追踪的**根本前提**
+- 这是实现行级血缘追踪的**根本前提**；SDK 层的 `OverwriteFiles` 不提供此能力
+
+- 实现要点：读取旧行时投影 `_row_id`，写入新 Parquet 时显式写入相同值
 
 ### 10.3 Compaction 时保留 RowID
 
@@ -357,7 +358,7 @@ Java Iceberg SDK 的 RowID 实现是一个**从元数据管理、数据读写、
 
 | 原则                                       | 说明                                            |
 | ---------------------------------------- | --------------------------------------------- |
-| **`_row_id` 永不改变**                       | 行在整个生命周期内保持相同的 `_row_id`                      |
+| **`_row_id` 分配后保持唯一**                    | 引擎层 UPDATE/MERGE 继承旧 ID；SDK 层 Overwrite 重新分配     |
 | **元数据分配 + 动态计算**                         | 读取时 firstRowId + position，Compaction 时显式写入物理列 |
 | **UPDATE 继承 RowID** (引擎层)                | 引擎层 UPDATE 继承旧 `_row_id`；SDK 层 Overwrite 不继承  |
 | **Compaction 保留 RowID**                  | 数据重写时保留 `_row_id` 物理列                         |
