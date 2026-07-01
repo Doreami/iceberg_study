@@ -217,6 +217,19 @@ Compaction 读取旧文件中的**存活数据**（未被删除的行），并�
 
 > **额外发现**：`newRewrite().rewriteFiles()` 会在 row-id 层面被视为 DELETE+INSERT——即使逻辑数据不变，`nextRowId` 仍会递增。实测验证：100 行数据 Rewrite 后，`nextRowId` 从 100 → 200，新文件 manifest `firstRowId=100`。但这不影响物理 `_row_id` 值的保留——读者读取的是 Parquet 物理列（值 0~99），而非从 manifest 动态计算。
 
+### 5.6 `newRewrite()` 与真正的 Compaction 的区别
+
+**纯 Java SDK 没有 Compaction API**。本章 V7 验证使用的 `table.newRewrite().rewriteFiles()` 是低层文件替换接口，不等于完整的 Compaction：
+
+| | `newRewrite()` (V7 用的) | 真正的 Compaction (`RewriteDataFiles` action) |
+|---|---|---|
+| **API** | `Table` 接口方法，纯 SDK 可用 | `org.apache.iceberg.actions.RewriteDataFiles`，需引擎（Spark/Flink） |
+| **文件选择** | 调用方手动指定新旧文件 | 引擎自动选择（bin-pack/sort/z-order 策略） |
+| **数据读写** | 调用方手动控制 schema | 引擎自动处理，含 `_row_id` 保留 |
+| **适用场景** | 验证 `_row_id` 保留机制 | 生产环境的表优化 |
+
+V7 验证的是**机制**（用 `schemaWithRowLineage` 读写能保留 `_row_id`），而非完整 Compaction 流程。引擎层的 `RewriteDataFiles` 内部也使用同样的机制来保证 Row Lineage 合规。
+
 ## 六、行级血缘追踪
 
 ### 6.1 SDK 提供的基础能力
@@ -277,7 +290,7 @@ Java SDK 本身**不提供** `row_lineage` 系统表或类似的直接查询接�
 | **DELETE RowID**                    | 保持不变，行标记删除                   | ✅ 完整支持  |
 | **UPDATE RowID**                    | 引擎层继承旧行；SDK 层 Overwrite 新 ID | ✅ 完整支持  |
 | **MERGE RowID**                     | 匹配行继承，新行分配新 ID               | ✅ 完整支持  |
-| **Compaction RowID**                | **保持不变**（需显式投影 _row_id + _last_updated_sequence_number 写入） | ✅ 完整支持  |
+| **Compaction RowID**                | 通过 `newRewrite()` + 显式投影两列实现保留（纯 SDK 无 Compaction API） | ✅ 完整支持  |
 | **增量扫描 API**                        | `IncrementalDataTableScan`   | ✅ 完整支持  |
 | **`row_lineage` 系统表**               | 引擎层功能，**非 SDK 提供**           | 由上层引擎实现 |
 | **虚拟列语法糖**                          | 引擎层功能，**非 SDK 提供**           | 由上层引擎实现 |
@@ -295,7 +308,7 @@ Java SDK 本身**不提供** `row_lineage` 系统表或类似的直接查询接�
 | **`_pos` 列读取**                      | ✅ 完整支持                                                         | 🔄 进行中（#2746 Draft） | Rust 正在实现 `_pos` 列读取                             |
 | **`_last_updated_sequence_number`** | ✅ 文件所属快照 seqNum / 物理列读取 自动切换                              | ❌ 无公开 PR            | Java 默认取文件快照 sequenceNumber；Compaction 后读物理列         |
 | **UPDATE RowID 继承**                 | ✅ 引擎层支持 (SDK 层 Overwrite 不继承)                                  | ❌ 无公开 PR            | Java 引擎层 UPDATE 继承；SDK Overwrite 是 DELETE+INSERT |
-| **Compaction 保留 RowID**             | ✅ 完整支持 (需显式投影 _row_id + _last_updated_sequence_number)               | ❌ 无公开 PR            | Java 需用 schemaWithRowLineage 同时投影两列；Rust 暂无此能力    |
+| **Compaction 保留 RowID**             | ✅ 通过 newRewrite() + 显式投影（纯 SDK 无 Compaction API）                        | ❌ 无公开 PR            | Java 用 schemaWithRowLineage 投影两列；引擎层 RewriteDataFiles 内部同机制 |
 | **增量扫描 API**                        | ✅ 完整支持                                                         | ✅ 已支持（#2153 Merged） | Rust 已实现 `appends_after()`                       |
 
 ## 九、Rust SDK 可参考的设计要点
