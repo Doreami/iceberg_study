@@ -663,7 +663,11 @@ public class ReportVerifier {
             for (FileScanTask task : tasks) {
                 long fileRowId = task.file().firstRowId();
                 long snapshotFirst = table.currentSnapshot().firstRowId();
-                System.out.printf("  新文件 firstRowId=%d, 快照 firstRowId=%d%n", fileRowId, snapshotFirst);
+                long nextRowId = myCatalog.getNextRowId(table);
+                System.out.printf("  新文件 firstRowId=%d, 快照 firstRowId=%d, TableMetadata.nextRowId=%d%n",
+                        fileRowId, snapshotFirst, nextRowId);
+                System.out.printf("  Compaction 是否消耗了 row-id: %s%n",
+                        nextRowId == 200 ? "是 (100→200，Rewrite 在 row-id 层面是 DELETE+INSERT)" : "否");
                 if (fileRowId != 0) {
                     System.out.printf("  → 若动态计算: _row_id = %d + position = [%d, %d]%n",
                             fileRowId, fileRowId, fileRowId + 99);

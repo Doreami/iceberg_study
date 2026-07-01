@@ -206,6 +206,8 @@ Compaction 读取旧文件中的**存活数据**（未被删除的行），并�
 - 引擎层（Spark/Flink/Impala）在实现 UPDATE/MERGE/Compaction 时必须遵守此规范，否则产生合规风险
 - **调用方的责任**：使用 `schemaWithRowLineage()` 读写，确保 Row Lineage 字段不丢失
 
+> **额外发现**：`newRewrite().rewriteFiles()` 会在 row-id 层面被视为 DELETE+INSERT——即使逻辑数据不变，`nextRowId` 仍会递增。实测验证：100 行数据 Rewrite 后，`nextRowId` 从 100 → 200，新文件 manifest `firstRowId=100`。但这不影响物理 `_row_id` 值的保留——读者读取的是 Parquet 物理列（值 0~99），而非从 manifest 动态计算。
+
 ## 六、行级血缘追踪
 
 ### 6.1 SDK 提供的基础能力
