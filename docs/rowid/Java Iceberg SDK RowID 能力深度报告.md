@@ -91,15 +91,18 @@ Java SDK 通过以下 MetadataColumns 常量来定义 RowID 相关的列：
 
 这一设计保证了：元数据列和用户列的命名不会冲突；物理存储位置不影响识别；Schema 演化（增加/删除用户列）不会误伤元数据列。
 
-### 3.6 物理列与动态计算的统一访问
+### 3.6 物理列与动态计算的自动切换
 
-对上层调用者而言，**读 `_row_id` 时无需关心它是物理列还是动态计算**：
+对上层调用者而言，**读 `_row_id` 时无需关心它是物理列还是动态计算**——SDK 根据 Parquet 文件中是否存在 `_row_id` 列自动选择路径：
 
-1. 使用 `MetadataColumns.schemaWithRowLineage()` 投影后，`rec.getField("_row_id")` 即可取值
-2. 若 Compaction 时显式写入了 `_row_id` 物理列（见 §6.1），SDK 自动使用物理列值
-3. 若 Parquet 中无物理列，SDK 自动通过 `firstRowId + row_position` 动态计算
+| 条件 | SDK 行为 | 验证 |
+|------|---------|------|
+| Parquet 无 `_row_id` 列（首次 INSERT） | 动态计算：`firstRowId + row_position` | V1/V2 |
+| Parquet 有 `_row_id` 列（Compaction 后显式写入） | 直接读物理列值 | V7 |
 
-两个路径对调用者透明，统一由 SDK 内部处理。
+> **V7 实证**：Rewrite 后的新 Parquet 有物理 `_row_id` 列（值为 0,1,...,99）。此时若动态计算，会得到 `new_firstRowId + new_position`（非原始值）。但验证结果显示 100 行的 `_row_id` 与原始值完全一致——证明 SDK 走了物理列读取路径。
+
+两个路径对调用者透明：都用 `schemaWithRowLineage()` 投影 + `rec.getField("_row_id")` 取值，SDK 内部自动切换。
 
 ## 四、RowID 的写入与读取
 
