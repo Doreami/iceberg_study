@@ -1,4 +1,4 @@
-# Rust Iceberg 自定义索引实现 — 需求与设计分析文档
+# Rust Iceberg 自定义索引 — RowID 增强设计文档
 
 > **文档目的**：基于 Java Iceberg SDK 的 RowID 实现、Rust Iceberg SDK（0.10.0）的社区现状、以及 Lance 对 RowID 的设计，分析自定义索引从 RowAddr 直连到 RowID 增强的演进路径。区分 SDK 缺失功能与索引需实现功能，按阶段给出优先级、工作量评估和并行开发建议。
 > 
